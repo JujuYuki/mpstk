@@ -1,6 +1,11 @@
-%%% Safety: in all reachable states, if two sender/receiver
-%%% roles can interact, then the inputs of the receiver are a superset of
-%%% the outputs of the sender.
+%%% Safety: in all reachable states:
+%%% - if two sender/receiver
+%%%   roles can interact, then the inputs of the receiver are a superset of
+%%%   the outputs of the sender;
+%%% - if a sender exists on session s from role p to role q, there exists no
+%%%   sender on the same session at the same time from q to p;
+%%% - if a receiver exists on session s on role p from role q, there exists no
+%%%   receiver on the same session at the same time on q from p.
 %%%
 %%% Copyright 2018 Alceste Scalas <alceste.scalas @ imperial.ac.uk>
 %%% Released under the MIT License: https://opensource.org/licenses/MIT
@@ -9,6 +14,10 @@ nu X.(
   (forall s1: Session, r1,r2: Role, m1,m2: Message, p1,p2: Payload .
     ((<o(s1, r1, r2, m1, p1)>true && <i(s1, r1, r2, m2, p2)>true) =>
       <t(s1, r1, r2, m1, p1)>true)
+    &&
+    (<i(s1, r1, r2, m1, p1)>true => [i(s1, r2, r1, m2, p2)]false)
+    &&
+    (<o(s1, r1, r2, m1, p1)>true => [o(s1, r2, r1, m2, p2)]false)
     &&
     [t(s1, r1, r2, m1, p1)]X
   )

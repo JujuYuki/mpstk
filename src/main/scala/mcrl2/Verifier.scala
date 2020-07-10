@@ -47,6 +47,16 @@ class Verifier(val spec: Spec,
     util.runCommand(cmd, args)
     path
   }
+  
+  private
+  lazy val dotFile: Path = {
+    val path = tempDir.resolve(Paths.get(spec.filename ++ ".dot"))
+    logger.debug(s"Generating DOT file: ${path}")
+    val cmd = "ltsconvert"
+    val args = Seq("-odot", s"${ltsFile}", s"${path}")
+    util.runCommand(cmd, args)
+	path
+  }
 
   /** The number of states of the mCRL2 specification {@code spec}. */
   lazy val states: Long = {
@@ -65,7 +75,7 @@ class Verifier(val spec: Spec,
     val path = tempDir.resolve(Paths.get(s"${spec.filename}-${p.filename}.pbes"))
     logger.debug(s"Creating PBES file: ${path.getFileName}")
     val cmd = "lps2pbes"
-    val args = Seq("-f", s"${mcfFiles(p)}", s"${lpsFile}", s"${path}")
+    val args = Seq("-c", "-f", s"${mcfFiles(p)}", s"${lpsFile}", s"${path}")
     util.runCommand(cmd, args)
     (p, path)
   }.toSeq:_*)
@@ -75,11 +85,47 @@ class Verifier(val spec: Spec,
   private def pbesCmdArgs(p: Property): (String, Seq[String]) = {
     ("pbes2bool", Seq("--strategy=2", s"${pbesFiles(p)}"))
   }
+  
+  private
+  lazy val evidLpsFiles: Map[Property, Path] = Map(properties.map { p =>
+    val path = tempDir.resolve(Paths.get(s"${p.filename}-evid.lps"))
+    logger.debug(s"creating evidence LPS file: ${path.getFileName}")
+    val cmd = "pbessolve"
+    val args = Seq(s"--evidence-file=${path}", s"-f${lpsFile}", s"${pbesFiles(p)}")
+    util.runCommand(cmd, args)
+	(p, path)
+  }.toSeq:_*)
+  // FIXME: Map[Property, Map[String, String]]
+  // with the second Map having fixed structure:
+  //   "value" => "true" | "false"
+  //   "path"  => path.toString()
+  
+  private
+  lazy val evidLtsFiles: Map[Property, Path] = Map(properties.map { p =>
+    val path = tempDir.resolve(Paths.get(s"${p.filename}-evid.lts"))
+    logger.debug(s"Generating evidence LTS file: ${path.getFileName}")
+    val cmd = "lps2lts"
+    val args = Seq(s"${evidLpsFiles(p)}", s"${path}")
+    util.runCommand(cmd, args)
+    (p, path)
+  }.toSeq:_*)
+  
+  /** Evidence files **/ 
+  private
+  lazy val evidDotFiles: Map[Property, Path] = Map(properties.map { p =>
+    val path = tempDir.resolve(Paths.get(s"${p.filename}-evid.dot"))
+    logger.debug(s"Generating evidence DOT file: ${path.getFileName}")
+    val cmd = "ltsconvert"
+    val args = Seq("-odot", s"${evidLtsFiles(p)}", s"${path}")
+    util.runCommand(cmd, args)
+    (p, path)
+  }.toSeq:_*)
 
   /** Verification results */
   lazy val results: Map[Property, Boolean] = Map(properties.map { p =>
     logger.debug(s"Checking: ${pbesFiles(p)}")
     val (cmd, args) = pbesCmdArgs(p)
+    val evidFile = evidDotFiles(p)
     (p, pbesResult(util.runCommand(cmd, args)))
   }.toSeq:_*)
 
@@ -125,6 +171,7 @@ class Verifier(val spec: Spec,
   def close(): Unit = {
     logger.debug(s"Removing temporary dir: ${tempDir}")
     deleteDir(tempDir.toFile)
+    logger.debug(s"Keeping temporary dir: ${tempDir}")
   }
 
   // Given the result of a pbes2bool invocation (via util.runCommand),

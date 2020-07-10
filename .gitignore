@@ -15,3 +15,7 @@ project/plugins/project/
 # Ensime
 .ensime
 .ensime_cache/
+
+# personal files
+TODO
+notes
