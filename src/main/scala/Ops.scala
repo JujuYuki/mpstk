@@ -12,14 +12,20 @@ package object ops {
     * have unique recursion vars */
   def barendregt(ctx: Context): Context = impl.barendregt(ctx)
 
+  def barendregt(p: Process): Process = impl.barendregt(p)
+
   /** Set of bound variables */
   def bv(t: Type): Set[RecVar] = impl.bv(t)
 
   /** Is the type closed? */
   def closed(t: Type): Boolean = fv(t).isEmpty
 
+  //def closed(p: Process): Boolean = fv(p).isEmpty
+
   /** Set of free variables */
   def fv(t: Type): Set[RecVar] = impl.fv(t)
+
+  //def fv(p: Process): Set[Process.RecVar] = impl.fv(p)
 
   /** Is the type guarded? */
   def guarded(t: Type): Boolean = impl.guarded(t, false)
@@ -27,6 +33,7 @@ package object ops {
 
   /** Set of roles that (might) interact in a global type */
   def roles(t: GlobalType): Set[Role] = impl.roles(t)
+  def roles(p: Process): Set[Role] = impl.roles(p)
 
   /** Substitute a recursion variable with a replacement MPST */
   def subst(t: MPST, recvar: RecVar, replacement: MPST): MPST = {
@@ -64,6 +71,10 @@ package object ops {
   /** Project a global type onto the given role */
   def projection(g: GlobalType, r: Role): Either[String, MPST] = {
     impl.projection(g, r)
+  }
+
+  def extraction(p: Process, r: Role): Either[String,MPST] = {
+    impl.extraction(p, r)
   }
 }
 
@@ -111,6 +122,12 @@ package object impl {
     case r: RecVar => (r, kvars)
   }
 
+  // Barendregt convention: Process (TODO later !)
+  protected[mpstk]
+  def barendregt(p: Process): Process = {
+    p
+  }
+
   // Barendregt convention: return a typing context where all types
   // have unique recursion vars
   protected[mpstk]
@@ -143,6 +160,18 @@ package object impl {
     case Rec(recvar, body) => fv(body) - recvar
     case r: RecVar => Set(r)
   }
+
+  // protected[mpstk]
+  // def fv(p: Process): Set[Process.RecVar] = p match {
+  //   case _: NonRecursiveType => Set.empty
+  //   case t: Process.Choice => {
+  //     t.choices.values.foldLeft(Set[Process.RecVar]()) { (acc, c) =>
+  //       acc ++ fv(c.payload) ++ fv(c.cont)
+  //     }
+  //   }
+  //   case Process.Rec(recvar, body) => fv(body) - recvar
+  //   case r: Process.RecVar => Set(r)
+  // }
 
   // Is the type guarded? @needsGuard tells whether we need to find a
   // branch/selection before a recursion variable
@@ -199,6 +228,7 @@ package object impl {
 
   // Return the potential outputs towards role @t in the given MPST, as pairs
   // of label and payload.
+  // Note: example of merging here (useful for process extension later)
   protected[mpstk]
   def outputs(t: MPST, to: Role): Set[(Label, Type)] = t match {
     case End => Set.empty
@@ -376,4 +406,64 @@ package object impl {
     case GlobalType.RecVar(_) => Set.empty
     case GlobalType.End => Set.empty
   }
+
+  protected[mpstk]
+  def roles(p:Process): Set[Role] = p match {
+    case Process.Branch(session, to, from, choices) => {
+      choices.foldLeft(Set[Role]()) {
+        (acc, lpc) => acc ++ roles(lpc._2.cont)
+      } ++ Set(to, from)
+    }
+    case Process.Select(session, from, to, choices) => {
+      choices.foldLeft(Set[Role]()) {
+        (acc, lpc) => acc ++ roles(lpc._2.cont)
+      } ++ Set(from, to)
+    }
+    case Process.Parallel(p1, p2) => roles(p1) ++ roles(p2)
+    case Process.Rec(_, body) => roles(body)
+    case Process.RecVar(_) => Set.empty
+    case Process.End => Set.empty
+  }
+
+  // Extract a process.
+  protected[mpstk]
+  def extraction(p: Process, r: Role): Either[String, MPST] = p match {
+    case Process.End => Right(End)
+    case Process.Branch(s, to, from, choices) if (to == r) => for {
+      choices2 <- extraction(choices, r)
+    } yield Branch(from, choices2)
+    case Process.Select(s, from, to, choices) if (from == r) => for {
+      choices2 <- extraction(choices, r)
+    } yield Select(to, choices2)
+    case Process.Select(s, from, to, choices) => Right(End) //TODO
+    case Process.Branch(s, to, from, choices) => Right(End) //TODO
+    case Process.Parallel(p1, p2) => p1 match {
+      case Process.Branch(s, to, from, choices) if (to == r) => extraction(p1, r)
+      case Process.Select(s, from, to, choices) if (from == r) => extraction(p1, r)
+      case _ => extraction(p2, r)
+    }
+
+    // dev phase 2:
+    // -to extract parallel: compare and take the non-end one, if exists?
+    // -to extract definitions: unroll
+    // -to extract call: most likely unroll, with special case if callee is caller -> keep caller in memory (as parameter maybe)
+    // --- def+call are going to be interesting because potential strange recursion patterns
+    // -to extract res: at first we extract restricted sessions like normal.
+
+    // dev phase 3:
+    // -add the possibility for payload to be a channel
+    // -add merging in consequence
+    // -mark restricted sessions for separation from open ones
+    
+    // dev phase 4: clean up code
+  }
+
+  private def extraction(choices: Choices[Process.PayloadCont],
+                         r: Role): Either[String, Choices[PayloadCont]] = for {
+    lpc2s <- mpstk.util.eitherList(choices.map { lpc =>
+      for {
+        cont <- extraction(lpc._2.cont, r)
+      } yield (lpc._1, PayloadCont(lpc._2.payload, cont))
+    }.toList)
+  } yield Map(lpc2s:_*)
 }

@@ -14,6 +14,7 @@ protected[tool] abstract class Common extends LazyLogging {
   val TOOL_NAME: String
   val FILE_EXT_GLOBAL_TYPE = ".global"
   val FILE_EXT_TYPING_CONTEXT = ".ctx"
+  val FILE_EXT_PROCESS = ".proc"
 
   /** Common class for configurations set up via command line options */
   protected[tool] class CommonConfig {

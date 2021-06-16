@@ -1,0 +1,2 @@
+( s[p][q]<|{foo.s[p][q](S)bar.0, bar.0} |
+s[q][p](S){bar.0, foo.s[q][p]<|bar.0} )

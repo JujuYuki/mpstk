@@ -30,6 +30,7 @@ CLASSPATH=`cat $CLASSPATHFILE`
 help_and_exit() {
   echo "Usage: $0 <COMMAND> [OPTIONS]..."
   echo "where <COMMAND> can be one of:"
+  echo "  * extract"
   echo "  * project"
   echo "  * verify"
   echo "Try '$0 <COMMAND> --help' for more information on a specific command"
@@ -40,7 +41,10 @@ if [ $# -lt 1 ]; then
     help_and_exit
 fi
 
-if [ "$1" = "project" ]; then
+if [ "$1" = "extract" ]; then
+    shift # Forget $1
+    java -cp $CLASSPATH mpstk.tool.Extractor $@
+elif [ "$1" = "project" ]; then
     shift # Forget $1
     java -cp $CLASSPATH mpstk.tool.Projector $@
 elif [ "$1" = "verify" ]; then

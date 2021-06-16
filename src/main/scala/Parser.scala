@@ -7,7 +7,7 @@ import scala.util.parsing.combinator._
 import scala.language.postfixOps
 
 import mpstk.{Channel, Label, Role, Session, Type, GroundType}
-import mpstk.{GlobalType, MPST, BasePayloadCont, PayloadCont,
+import mpstk.{Process, GlobalType, MPST, BasePayloadCont, PayloadCont,
               Branch, Select, Rec, RecVar, End}
 import mpstk.Context
 import mpstk.raw
@@ -44,21 +44,35 @@ abstract trait BaseParser extends RegexParsers {
     _ => GroundType.Unit
   }
 
-  def choice[A, PC <: BasePayloadCont[A]](tpe: Parser[Type],
+  // Choice adaptation: restrain the type for "value"
+
+  def choice[A, PC <: BasePayloadCont[A]](value: Parser[String],
+                             tpe: Parser[Type],
                              cont: Parser[A],
                              cfg: ParserConfig[A, PC]): Parser[(Label, PC)] = {
-    label ~ payloadcont(tpe, cont, cfg) ^^ { lpc =>
+    label ~ payloadcont(value, tpe, cont, cfg) ^^ { lpc =>
       (lpc._1, lpc._2)
     }
   }
 
-  def payloadcont[A, PC <: BasePayloadCont[A]](tpe: Parser[Type],
+  def payloadcont[A, PC <: BasePayloadCont[A]](value: Parser[String],
+                                      tpe: Parser[Type],
                                       cont: Parser[A],
                                       cfg: ParserConfig[A, PC]): Parser[PC] = {
+    payloadcontProcess(value, tpe, cont, cfg) |
     payloadcontFull(tpe, cont, cfg) |
     payloadcontNoPay(cont, cfg) |
     payloadcontNoCont(tpe, cfg) |
     payloadcontEmpty(cfg)
+  }
+
+  def payloadcontProcess[A, PC <: BasePayloadCont[A]](value: Parser[String],
+                                      tpe: Parser[Type],
+                                      cont: Parser[A],
+                                      cfg: ParserConfig[A, PC]): Parser[PC] = {
+    ("(" ~> (value ~ "@" ~ tpe) <~ ")") ~ ("." ~> cont) ^^ {
+      pc => cfg.PayloadCont(pc._1._2, pc._2)
+    }
   }
 
   def payloadcontFull[A, PC <: BasePayloadCont[A]](tpe: Parser[Type],
@@ -87,16 +101,18 @@ abstract trait BaseParser extends RegexParsers {
     "" ^^ { _ => cfg.PayloadCont(cfg.endPayload, cfg.endCont) }
   }
 
-  def choices[A, PC <: BasePayloadCont[A]](tpe: Parser[Type],
+  def choices[A, PC <: BasePayloadCont[A]](value: Parser[String],
+                       tpe: Parser[Type],
                        cont: Parser[A],
                        cfg: ParserConfig[A, PC]): Parser[List[(Label, PC)]] = {
-    choicesMulti(tpe, cont, cfg) | choicesSingle(tpe, cont, cfg)
+    choicesMulti(value, tpe, cont, cfg) | choicesSingle(value, tpe, cont, cfg)
   }
 
-  def choicesMulti[A, PC <: BasePayloadCont[A]](tpe: Parser[Type],
+  def choicesMulti[A, PC <: BasePayloadCont[A]](value: Parser[String],
+                       tpe: Parser[Type],
                        cont: Parser[A],
                        cfg: ParserConfig[A, PC]): Parser[List[(Label, PC)]] = {
-    "{" ~> rep1sep(choice(tpe, cont, cfg), ",") <~ "}" ^? ({ 
+    "{" ~> rep1sep(choice(value, tpe, cont, cfg), ",") <~ "}" ^? ({ 
       case l: List[(Label, PC)] if (
         // Ensure that labels are unique
         l.map(_._1).distinct.size == l.size
@@ -110,10 +126,115 @@ abstract trait BaseParser extends RegexParsers {
     })
   }
 
-  def choicesSingle[A, PC <: BasePayloadCont[A]](tpe: Parser[Type],
+  def choicesSingle[A, PC <: BasePayloadCont[A]](value: Parser[String],
+                       tpe: Parser[Type],
                        cont: Parser[A],
                        cfg: ParserConfig[A, PC]): Parser[List[(Label, PC)]] = {
-    choice(tpe, cont, cfg) ^^ { c => List(c) }
+    choice(value, tpe, cont, cfg) ^^ { c => List(c) }
+  }
+}
+
+// Process parser here:
+// syntax: 
+// Process P:
+// P = c[q]<|m(d).P | P = c[q](S){m1(d1).P1,...,mn(dn).Pn} | P = 0
+// | P = (P|Q) | P = (nu s)P | P = X<c1,...,cn> | P = def D in P
+// Def D:
+// "X(x1,...,xn) = P"
+// Endpoint c: 
+// x | s[p]
+
+protected[parser]
+class ProcParser extends BaseParser {
+  private val cfg = ParserConfig[Process, Process.PayloadCont](
+    (payload: Type, cont: Process) => Process.PayloadCont(payload, cont),
+    End,
+    Process.End
+  )
+
+  def session: Parser[Session] = identifier ^^ { s => Session(s) }
+
+  def value: Parser[String] = identifier ^^ { x => x }
+
+  def channel: Parser[Channel] = session ~ ("[" ~> role <~ "]") ^^ {
+    sr => Channel(sr._1, sr._2)
+  }
+
+  def tpe: Parser[Type] = ground //| mpst
+
+  def proc: Parser[Process] = {
+    ("(" ~> parallel <~ ")") | branch | select | end //| definition | res | call
+  }
+
+  def end: Parser[Process.End.type] = "0".r ^^ { _ => Process.End }
+
+  def parallelSym: Parser[String] = "|"
+  def parallel: Parser[Process.Parallel] = {
+    proc ~ (parallelSym ~> proc) ^^ { rp =>
+      Process.Parallel(rp._1, rp._2)
+    }
+  }
+
+  // Process call => unroll process def procDef[defName].proc !
+  // defName ~ ("<" ~> endpointList(args?) <~ ">") ^^ {*function here with UNROLL*}
+
+  // Process def
+  // "def" ~> procDef <~ "in" ~> proc ^^ {*function here*}
+  // procdef == defName ~ ("(" ~> argList <~ ")") <~ "=" ~> proc ^^ {*function here*}
+
+  def branchSym: Parser[String] = "(S)"
+  def branch: Parser[Process.Branch] = {
+    session ~ ("[" ~> role <~ "]") ~ ("[" ~> role <~ "]") ~ (branchSym ~> choices(value, tpe, proc, cfg)) ^^ { rc =>
+      Process.Branch(rc._1._1._1, rc._1._1._2, rc._1._2, Map(rc._2:_*))
+    }
+  }
+
+  def selectSym: Parser[String] = "<|"
+  def select: Parser[Process.Select] = {
+    session ~ ("[" ~> role <~ "]") ~ ("[" ~> role <~ "]") ~ (selectSym ~> choices(value, tpe, proc, cfg)) ^^ { rc =>
+      Process.Select(rc._1._1._1, rc._1._1._2, rc._1._2, Map(rc._2:_*))
+    }
+  }
+
+  // Need to adapt choices to process format
+  // phase 1: payload = name or value + type as annotation
+  // phase 2: payload .= channel + type as annotation
+
+  // When channel passing is allowed: change the actor to allow for "value"
+}
+
+// object ProcParser extends ProcParser {
+//   /** Parse a process from a string. */
+//   def parse(input: String): ParseResult[Process] = {
+//     parseAll(comments ~> proc, input)
+//   }
+// }
+
+/** Parser for global types. */
+object ProcParser extends ProcParser {
+  import java.nio.file.{Files, Path, Paths}
+  import scala.collection.JavaConverters._
+
+  /** Parse a global type from a string. */
+  def parse(input: String): ParseResult[Process] = {
+    parseAll(comments ~> proc, input)
+  }
+
+  /** Parse a global type from a file, given as {@code Path}.
+    * 
+    * @throws java.io.IOException in case of I/O error
+    */
+  def parse(input: Path): ParseResult[Process] = {
+    parse(Files.readAllLines(input).asScala.mkString("\n"))
+  }
+
+  /** Parse a global type from a file, given as {@code String}.
+    * 
+    * @throws java.io.IOException in case of I/O error
+    * @throws java.nio.file.InvalidPathException if {@code filename} is invalid
+    */
+  def parseFile(filename: String): ParseResult[Process] = {
+    parse(Paths.get(filename))
   }
 }
 
@@ -126,6 +247,8 @@ class MPSTParser extends BaseParser {
   )
 
   def tpe: Parser[Type] = ground | mpst
+
+  def value: Parser[String] = identifier ^^ { x => x }
 
   // NOTE: always try to match recvar last (otw, it might capture e.g. "end")
   def mpst: Parser[MPST] = {
@@ -142,14 +265,14 @@ class MPSTParser extends BaseParser {
 
   def branchSym: Parser[String] = "&"
   def branch: Parser[Branch] = {
-    role ~ (branchSym ~> choices(tpe, mpst, cfg)) ^^ { rc =>
+    role ~ (branchSym ~> choices(value, tpe, mpst, cfg)) ^^ { rc =>
       Branch(rc._1, Map(rc._2:_*))
     }
   }
 
   def selectSym: Parser[String] = "⊕" | "(+)"
   def select: Parser[Select] = {
-    role ~ (selectSym ~> choices(tpe, mpst, cfg)) ^^ { rc =>
+    role ~ (selectSym ~> choices(value, tpe, mpst, cfg)) ^^ { rc =>
       Select(rc._1, Map(rc._2:_*))
     }
   }
@@ -258,7 +381,7 @@ class GlobalTypeParser extends MPSTParser {
 
   def commSym: Parser[String] = "→" | "->"
   def comm: Parser[GlobalType.Comm] = {
-    role ~ (commSym ~> role <~ (":"?)) ~ choices(tpe, globaltype, cfg) ^^ { rc=>
+    role ~ (commSym ~> role <~ (":"?)) ~ choices(value, tpe, globaltype, cfg) ^^ { rc=>
       GlobalType.Comm(rc._1._1, rc._1._2, Map(rc._2:_*))
     }
   }
