@@ -30,6 +30,7 @@ package object ops {
   /** Is the type guarded? */
   def guarded(t: Type): Boolean = impl.guarded(t, false)
   def guarded(t: GlobalType): Boolean = impl.guarded(t, false)
+  def guarded(p: Process): Boolean = impl.guarded(p, false)
 
   /** Set of roles that (might) interact in a global type */
   def roles(t: GlobalType): Set[Role] = impl.roles(t)
@@ -194,6 +195,20 @@ package object impl {
     case GlobalType.Rec(_, body) => guarded(body, true)
     case GlobalType.RecVar(_) => !needsGuard
     case GlobalType.End => true
+  }
+
+  protected[mpstk]
+  def guarded(p: Process, needsGuard: Boolean): Boolean = p match {
+    case Process.End => true
+    case Process.Select(_, _, _, choices) => choices.values.forall { pc =>
+      guarded(pc.payload, false) && guarded(pc.cont, false)
+    }
+    case Process.Branch(_, _, _, choices) => choices.values.forall { pc =>
+      guarded(pc.payload, false) && guarded(pc.cont, false)
+    }
+    case Process.Parallel(p1, p2) => guarded(p1, false) && guarded(p2, false)
+    case Process.Rec(_, body, _) => guarded(body, true)
+    case Process.RecVar(_) => !needsGuard
   }
 
   // Substitute a recursion variable with a replacement MPST
@@ -420,7 +435,7 @@ package object impl {
       } ++ Set(from, to)
     }
     case Process.Parallel(p1, p2) => roles(p1) ++ roles(p2)
-    case Process.Rec(_, body) => roles(body)
+    case Process.Rec(_, body, _) => roles(body)
     case Process.RecVar(_) => Set.empty
     case Process.End => Set.empty
   }

@@ -163,7 +163,7 @@ class ProcParser extends BaseParser {
   def tpe: Parser[Type] = ground //| mpst
 
   def proc: Parser[Process] = {
-    ("(" ~> parallel <~ ")") | branch | select | end //| definition | res | call
+    ("(" ~> parallel <~ ")") | branch | select | end | rec | recvar //| definition | res | call
   }
 
   def end: Parser[Process.End.type] = "0".r ^^ { _ => Process.End }
@@ -175,8 +175,10 @@ class ProcParser extends BaseParser {
     }
   }
 
+  def defName: Parser[Process.DefName] = identifier ^^ { name => Process.DefName(name) }
+
   // Process call => unroll process def procDef[defName].proc !
-  // defName ~ ("<" ~> endpointList(args?) <~ ">") ^^ {*function here with UNROLL*}
+  // defName ~ ("⟨" ~> endpointList(args?) <~ "⟩") ^^ {*function here with UNROLL*}
 
   // Process def
   // "def" ~> procDef <~ "in" ~> proc ^^ {*function here*}
@@ -195,6 +197,18 @@ class ProcParser extends BaseParser {
       Process.Select(rc._1._1._1, rc._1._1._2, rc._1._2, Map(rc._2:_*))
     }
   }
+
+  def recSym: Parser[String] = "μ" | "rec"
+  def rec: Parser[Process.Rec] = (((recSym ~ "(") ~> recvar <~ ")") ~ proc ~ ("⟨" ~> channel <~ "⟩")) ^^ { rm =>
+    Process.Rec(rm._1._1, rm._1._2, rm._2)
+  } ^? ({
+    case p: Process.Rec if p.guarded => p
+  }, { p =>
+    s"Unguarded recursion on ${p.recvar}"
+  })
+
+  def recvar: Parser[Process.RecVar] = identifier ^^ { name => Process.RecVar(name) }
+
 
   // Need to adapt choices to process format
   // phase 1: payload = name or value + type as annotation

@@ -13,7 +13,7 @@ sealed abstract class Process {
   //def fv: Set[Process.RecVar] = ops.fv(this)
 
   /** Does the process have guarded recursion variables, only? */
-  //def guarded: Boolean = ops.guarded(this)
+  def guarded: Boolean = ops.guarded(this)
   //guardedness for processes is different (and we may not care about it)
 
   /** Merge (if possible) with the given process. */
@@ -82,12 +82,17 @@ object Process {
   }
 
   /** Recursive type. */
-  case class Rec(recvar: RecVar, body: Process) extends Process {
-    override def toString = s"μ(${recvar})${body}"//${actor}
+  case class Rec(recvar: RecVar, body: Process, chan: Channel) extends Process {
+    override def toString = s"μ(${recvar})${body}⟨${chan}⟩"
   }
 
   /** Recursion variable. */
   case class RecVar(name: String) extends Process {
+    override def toString = s"${name}"
+  }
+
+  /** Definition variable. */
+  case class DefName(name: String) extends Process {
     override def toString = s"${name}"
   }
 }
