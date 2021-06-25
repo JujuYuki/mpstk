@@ -83,7 +83,7 @@ class Verifier(val spec: Spec,
   // Return the mCRL2 command that verifies the parameterised boolean
   // equation system (PBES) of the spec, for the given property
   private def pbesCmdArgs(p: Property): (String, Seq[String]) = {
-    ("pbes2bool", Seq("--strategy=2", s"${pbesFiles(p)}"))
+    ("pbes2bool", Seq("--solve-strategy=2", s"${pbesFiles(p)}"))
   }
   
   private
