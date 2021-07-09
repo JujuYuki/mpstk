@@ -191,7 +191,7 @@ class ProcParser extends BaseParser {
     }
   }
 
-  def selectSym: Parser[String] = "<|"
+  def selectSym: Parser[String] = "<|" | "◁"
   def select: Parser[Process.Select] = {
     session ~ ("[" ~> role <~ "]") ~ ("[" ~> role <~ "]") ~ (selectSym ~> choices(value, tpe, proc, cfg)) ^^ { rc =>
       Process.Select(rc._1._1._1, rc._1._1._2, rc._1._2, Map(rc._2:_*))

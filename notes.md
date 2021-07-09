@@ -1,3 +1,23 @@
+# Phase 1 extensions
+## Definition
+
+def X(xi~) = def Y = R(X) in P(Y) in Q
+- Limitation: several-level recursive definitions is (1) hard, (2) mostly intended to break the tool. We only do 1-level recursion.
+
+def acts as binder double times:
+- once for X w.r.t Q (alpha convert X if already exists in the stack, both in X, P and Q)
+- once for the xi's w.r.t P (alpha convert those only in X(xi~) and in P)
+
+Parser: add new storage type Def. Stores a name for the defined item, argument names for this item (can be empty), corresponding process for the item ans finally continuation.
+
+### Process.scala
+case class Definition(defname: DefName, dafvars: List[DefVar], defproc: Process, contproc: Process)
+
+### Parser.scala
+definition === "def" ~> (definitionblock) <~ "in" ~> proc
+
+definitionblock === defName ~ ("(" ~> varList <~ ")") ~ ("=" ~> proc)
+
 # DOT format memo:
 
 ```
