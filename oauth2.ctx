@@ -1,0 +1,3 @@
+s[p]: q⊕{login(end).r&{auth(bool).end}, cancel(end).end},
+s[r]: q&{passwd(end).p⊕{auth(bool).end}, quit(end).end},
+s[q]: p&{login(end).r⊕{passwd(end).end}, cancel(end).r⊕{quit(end).end}}

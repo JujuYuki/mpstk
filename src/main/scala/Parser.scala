@@ -112,7 +112,7 @@ abstract trait BaseParser extends RegexParsers {
                        tpe: Parser[Type],
                        cont: Parser[A],
                        cfg: ParserConfig[A, PC]): Parser[List[(Label, PC)]] = {
-    "{" ~> rep1sep(choice(value, tpe, cont, cfg), ",") <~ "}" ^? ({ 
+    "{" ~> rep1sep(choice(value, tpe, cont, cfg), ",") <~ "}" ^? ({
       case l: List[(Label, PC)] if (
         // Ensure that labels are unique
         l.map(_._1).distinct.size == l.size
@@ -135,13 +135,13 @@ abstract trait BaseParser extends RegexParsers {
 }
 
 // Process parser here:
-// syntax: 
+// syntax:
 // Process P:
 // P = c[q]<|m(d).P | P = c[q](S){m1(d1).P1,...,mn(dn).Pn} | P = 0
 // | P = (P|Q) | P = (nu s)P | P = X<c1,...,cn> | P = def D in P
 // Def D:
 // "X(x1,...,xn) = P"
-// Endpoint c: 
+// Endpoint c:
 // x | s[p]
 
 protected[parser]
@@ -177,12 +177,30 @@ class ProcParser extends BaseParser {
 
   def defName: Parser[Process.DefName] = identifier ^^ { name => Process.DefName(name) }
 
-  // Process call => unroll process def procDef[defName].proc !
-  // defName ~ ("⟨" ~> endpointList(args?) <~ "⟩") ^^ {*function here with UNROLL*}
+  // def choices[A, PC <: BasePayloadCont[A]](value: Parser[String],
+  //                        tpe: Parser[Type],
+  //                        cont: Parser[A],
+  //                        cfg: ParserConfig[A, PC]): Parser[List[(Label, PC)]] = {
+  //     choicesMulti(value, tpe, cont, cfg) | choicesSingle(value, tpe, cont, cfg)
+  //   }
 
-  // Process def
-  // "def" ~> procDef <~ "in" ~> proc ^^ {*function here*}
-  // procdef == defName ~ ("(" ~> argList <~ ")") <~ "=" ~> proc ^^ {*function here*}
+  // def defVars[A](value: Parser[String],
+  //               tpe: Parser[Type]) : Parser[List[(A)]] = {
+
+  // }
+
+  // def definition: Parser[Process.Definition] = {
+  //   ("def" ~> defName ~ ("(" ~> defVars(value, tpe) <~ ")") ~ ("=" proc) <~ "in") ~ proc ^^ { rv =>
+  //     Process.Definition(rv._1._1._1, Map(rv._1._1._2:_*), rv._1._2, rv._2)
+  //   }
+  // }
+
+  // Simpler Definition with no arguments
+  def definition: Parser[Process.Definition] = {
+    ("def" ~> defName ~ ("=" proc) <~ "in") ~ proc ^^ { rv =>
+      Process.Definition(rv._1._1, rv._1._2, rv._2)
+    }
+  }
 
   def branchSym: Parser[String] = "(S)"
   def branch: Parser[Process.Branch] = {
@@ -235,7 +253,7 @@ object ProcParser extends ProcParser {
   }
 
   /** Parse a global type from a file, given as {@code Path}.
-    * 
+    *
     * @throws java.io.IOException in case of I/O error
     */
   def parse(input: Path): ParseResult[Process] = {
@@ -243,7 +261,7 @@ object ProcParser extends ProcParser {
   }
 
   /** Parse a global type from a file, given as {@code String}.
-    * 
+    *
     * @throws java.io.IOException in case of I/O error
     * @throws java.nio.file.InvalidPathException if {@code filename} is invalid
     */
@@ -352,7 +370,7 @@ object ContextParser extends ContextParser {
   }
 
   /** Parse a session typing context from a file, given as {@code Path}.
-    * 
+    *
     * @throws java.io.IOException in case of I/O error
     */
   def parse(input: Path): ParseResult[Context] = {
@@ -360,7 +378,7 @@ object ContextParser extends ContextParser {
   }
 
   /** Parse a session typing context from a file, given as {@code String}.
-    * 
+    *
     * @throws java.io.IOException in case of I/O error
     * @throws java.nio.file.InvalidPathException if {@code filename} is invalid
     */
@@ -428,7 +446,7 @@ object GlobalTypeParser extends GlobalTypeParser {
   }
 
   /** Parse a global type from a file, given as {@code Path}.
-    * 
+    *
     * @throws java.io.IOException in case of I/O error
     */
   def parse(input: Path): ParseResult[GlobalType] = {
@@ -436,7 +454,7 @@ object GlobalTypeParser extends GlobalTypeParser {
   }
 
   /** Parse a global type from a file, given as {@code String}.
-    * 
+    *
     * @throws java.io.IOException in case of I/O error
     * @throws java.nio.file.InvalidPathException if {@code filename} is invalid
     */

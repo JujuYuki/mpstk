@@ -81,7 +81,7 @@ object Process {
     override def toString = s"${p1} | ${p2}"
   }
 
-  /** Recursive type. */
+  /** Recursive process (shortcut). */
   case class Rec(recvar: RecVar, body: Process, chan: Channel) extends Process {
     override def toString = s"μ(${recvar})${body}⟨${chan}⟩"
   }
@@ -94,5 +94,9 @@ object Process {
   /** Definition variable. */
   case class DefName(name: String) extends Process {
     override def toString = s"${name}"
+  }
+
+  case class Definition(defvar: DefName, p1: Process, p2: Process) extends Process {
+    override def toString= s"def S{defvar} = ${p1} in ${p2}"
   }
 }
