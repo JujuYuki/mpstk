@@ -11,7 +11,7 @@ def acts as binder double times:
 Parser: add new storage type Def. Stores a name for the defined item, argument names for this item (can be empty), corresponding process for the item ans finally continuation.
 
 ### Process.scala
-case class Definition(defname: DefName, dafvars: List[DefVar], defproc: Process, contproc: Process)
+case class Definition(defname: DefName, defvars: List[DefVar], defproc: Process, contproc: Process)
 
 ### Parser.scala
 definition === "def" ~> (definitionblock) <~ "in" ~> proc

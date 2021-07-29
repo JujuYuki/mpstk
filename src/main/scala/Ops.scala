@@ -209,6 +209,8 @@ package object impl {
     case Process.Parallel(p1, p2) => guarded(p1, false) && guarded(p2, false)
     case Process.Rec(_, body, _) => guarded(body, true)
     case Process.RecVar(_) => !needsGuard
+    case Process.Definition(_, defproc, body) => guarded(defproc, true) && guarded(body, true)
+    case Process.Call(_) => !needsGuard
   }
 
   // Substitute a recursion variable with a replacement MPST
@@ -438,6 +440,8 @@ package object impl {
     case Process.Rec(_, body, _) => roles(body)
     case Process.RecVar(_) => Set.empty
     case Process.End => Set.empty
+    case Process.Call(_) => Set.empty //TODO when call has arguments
+    case Process.Definition(_, p1, p2) => roles(p1) ++ roles(p2) //TODO same
   }
 
   // Extract a process.
@@ -457,20 +461,72 @@ package object impl {
       case Process.Select(s, from, to, choices) if (from == r) => extraction(p1, r)
       case _ => extraction(p2, r)
     }
+    case Process.Definition(dv, p1, p2) => extraction(p1, r, dv) match {
+      case Left(s) => extraction(p2, r, dv, Left(s))
+      case Right(End) => extraction(p2, r, dv, Right(End))
+      case Right(i) => extraction(p2, r, dv, Right(Rec(RecVar(dv.toString), i)))
+      // TODO handle recursive end in t1 to add recursion head.
+    }
+    // keep dv in memory & check against cv => 
+    //  - in p1 if reach a call for dv, result in recursion variable and return true to rec => p1 is to be extracted with full recursive type;
+    //  - in p2 if reach a call for dv, extract with the extracted type for p1.
+  }
 
-    // dev phase 2:
-    // -to extract parallel: compare and take the non-end one, if exists?
-    // -to extract definitions: unroll
-    // -to extract call: most likely unroll, with special case if callee is caller -> keep caller in memory (as parameter maybe)
-    // --- def+call are going to be interesting because potential strange recursion patterns
-    // -to extract res: at first we extract restricted sessions like normal.
+  // extraction for left side of definition
+  private def extraction(p: Process, r: Role, dv: Process.DefName): Either[String, MPST] = p match {
+    case Process.End => Right(End)
+    case Process.Branch(s, to, from, choices) if (to == r) => for {
+      choices2 <- extraction(choices, r, dv)
+    } yield Branch(from, choices2)
+    case Process.Select(s, from, to, choices) if (from == r) => for {
+      choices2 <- extraction(choices, r, dv)
+    } yield Select(to, choices2)
+    case Process.Select(s, from, to, choices) => Right(End) //TODO
+    case Process.Branch(s, to, from, choices) => Right(End) //TODO
+    case Process.Parallel(p1, p2) => p1 match {
+      case Process.Branch(s, to, from, choices) if (to == r) => extraction(p1, r, dv)
+      case Process.Select(s, from, to, choices) if (from == r) => extraction(p1, r, dv)
+      case Process.Call(cv) if (cv == dv) => Right(RecVar(cv.toString))
+      case _ => extraction(p2, r, dv)
+    }
+    case Process.Definition(dvnew, p1, p2) => extraction(p1, r, dvnew) match {
+      case Left(s) => extraction(p2, r, dvnew, Left(s))
+      case Right(End) => extraction(p2, r, dvnew, Right(End))
+      case Right(i) => extraction(p2, r, dvnew, Right(Rec(RecVar(dvnew.toString), i))) // TODO handle more than one recursion level (change dv to a list dv => recvars?)
+      // TODO handle recursive end (same as above)
+    }
+    case Process.Call(cv) if (cv == dv) => Right(RecVar(cv.toString))
+  }
 
-    // dev phase 3:
-    // -add the possibility for payload to be a channel
-    // -add merging in consequence
-    // -mark restricted sessions for separation from open ones
-    
-    // dev phase 4: clean up code
+  // extraction right side of definition
+  private def extraction(p: Process, r: Role, dv: Process.DefName, t: Either[String,MPST]): Either[String, MPST] = p match {
+    case Process.End => Right(End)
+    case Process.Branch(s, to, from, choices) if (to == r) => for {
+      choices2 <- extraction(choices, r, dv, t)
+    } yield Branch(from, choices2)
+    case Process.Select(s, from, to, choices) if (from == r) => for {
+      choices2 <- extraction(choices, r, dv, t)
+    } yield Select(to, choices2)
+    case Process.Select(s, from, to, choices) => Right(End) //TODO
+    case Process.Branch(s, to, from, choices) => Right(End) //TODO
+    case Process.Parallel(p1, p2) => p1 match {
+      case Process.Branch(s, to, from, choices) if (to == r) => extraction(p1, r, dv, t)
+      case Process.Select(s, from, to, choices) if (from == r) => extraction(p1, r, dv, t)
+      case Process.Call(cv) if (cv == dv) => t match {
+        case Left(s) => Left(s)
+        case Right(End) => extraction(p2, r, dv, t)
+        case Right(i) => Right(i)
+      }
+      case _ => extraction(p2, r, dv, t)
+    }
+    case Process.Definition(dvnew, p1, p2) => extraction(p1, r, dvnew) match {
+      case Left(s) => extraction(p2, r, dvnew, Left(s))
+      case Right(End) => extraction(p2, r, dvnew, t)
+      case Right(i) => extraction(p2, r, dvnew, Right(Rec(RecVar(dvnew.toString), i)))
+      // TODO handle recursive end (same as above)
+    }
+    // above TODO: if more than one rec level: many changes needed to handle several types and variables
+    case Process.Call(cv) if (cv == dv) => t
   }
 
   private def extraction(choices: Choices[Process.PayloadCont],
@@ -478,6 +534,26 @@ package object impl {
     lpc2s <- mpstk.util.eitherList(choices.map { lpc =>
       for {
         cont <- extraction(lpc._2.cont, r)
+      } yield (lpc._1, PayloadCont(lpc._2.payload, cont))
+    }.toList)
+  } yield Map(lpc2s:_*)
+
+  // left side definition
+  private def extraction(choices: Choices[Process.PayloadCont],
+                         r: Role, dv: Process.DefName): Either[String, Choices[PayloadCont]] = for {
+    lpc2s <- mpstk.util.eitherList(choices.map { lpc =>
+      for {
+        cont <- extraction(lpc._2.cont, r, dv)
+      } yield (lpc._1, PayloadCont(lpc._2.payload, cont))
+    }.toList)
+  } yield Map(lpc2s:_*)
+
+  // right side definition
+  private def extraction(choices: Choices[Process.PayloadCont],
+                         r: Role, dv: Process.DefName, t: Either[String,MPST]): Either[String, Choices[PayloadCont]] = for {
+    lpc2s <- mpstk.util.eitherList(choices.map { lpc =>
+      for {
+        cont <- extraction(lpc._2.cont, r, dv, t)
       } yield (lpc._1, PayloadCont(lpc._2.payload, cont))
     }.toList)
   } yield Map(lpc2s:_*)

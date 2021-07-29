@@ -97,6 +97,10 @@ object Process {
   }
 
   case class Definition(defvar: DefName, p1: Process, p2: Process) extends Process {
-    override def toString= s"def S{defvar} = ${p1} in ${p2}"
+    override def toString= s"def ${defvar} = ${p1} in ${p2}" //TODO ${defvar}(${vars})
+  }
+
+  case class Call(callvar: DefName) extends Process {
+    override def toString= s"${callvar}⟨⟩" //TODO <${vars}>
   }
 }

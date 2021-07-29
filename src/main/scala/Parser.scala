@@ -138,7 +138,7 @@ abstract trait BaseParser extends RegexParsers {
 // syntax:
 // Process P:
 // P = c[q]<|m(d).P | P = c[q](S){m1(d1).P1,...,mn(dn).Pn} | P = 0
-// | P = (P|Q) | P = (nu s)P | P = X<c1,...,cn> | P = def D in P
+// | P = (P|Q) | P = (nu s)P | P = X⟨c1,...,cn⟩ | P = def D in P
 // Def D:
 // "X(x1,...,xn) = P"
 // Endpoint c:
@@ -163,7 +163,7 @@ class ProcParser extends BaseParser {
   def tpe: Parser[Type] = ground //| mpst
 
   def proc: Parser[Process] = {
-    ("(" ~> parallel <~ ")") | branch | select | end | rec | recvar //| definition | res | call
+    definition | call | ("(" ~> parallel <~ ")") | branch | select | end | rec | recvar // | res
   }
 
   def end: Parser[Process.End.type] = "0".r ^^ { _ => Process.End }
@@ -197,12 +197,20 @@ class ProcParser extends BaseParser {
 
   // Simpler Definition with no arguments
   def definition: Parser[Process.Definition] = {
-    ("def" ~> defName ~ ("=" proc) <~ "in") ~ proc ^^ { rv =>
+    ("def" ~> defName ~ ("=" ~> proc <~ "in")) ~ proc ^^ { rv =>
       Process.Definition(rv._1._1, rv._1._2, rv._2)
     }
   }
 
-  def branchSym: Parser[String] = "(S)"
+  def callSymL: Parser[String] = "⟨" | "<"
+  def callSymR: Parser[String] = "⟩" | ">"
+  def call: Parser[Process.Call] = {
+    defName ~ (callSymL ~ callSymR) ^^ { cv =>
+      Process.Call(cv._1)
+    }
+  }
+
+  def branchSym: Parser[String] = "(S)" | "Σ"
   def branch: Parser[Process.Branch] = {
     session ~ ("[" ~> role <~ "]") ~ ("[" ~> role <~ "]") ~ (branchSym ~> choices(value, tpe, proc, cfg)) ^^ { rc =>
       Process.Branch(rc._1._1._1, rc._1._1._2, rc._1._2, Map(rc._2:_*))
@@ -217,7 +225,7 @@ class ProcParser extends BaseParser {
   }
 
   def recSym: Parser[String] = "μ" | "rec"
-  def rec: Parser[Process.Rec] = (((recSym ~ "(") ~> recvar <~ ")") ~ proc ~ ("⟨" ~> channel <~ "⟩")) ^^ { rm =>
+  def rec: Parser[Process.Rec] = (((recSym ~ "(") ~> recvar <~ ")") ~ proc ~ (callSymL ~> channel <~ callSymR)) ^^ { rm =>
     Process.Rec(rm._1._1, rm._1._2, rm._2)
   } ^? ({
     case p: Process.Rec if p.guarded => p
