@@ -1,0 +1,15 @@
+### Authorization protocol fragment, based on OAuth2 (RFC 6749).
+###
+### Copyright 2021 Julia Gabet <j.gabet18 @ imperial.ac.uk>
+### Released under the MIT License: https://opensource.org/licenses/MIT
+
+## p = server
+## q = client
+## r = authenticator
+
+( def P = 
+  ( def Q = 
+  ( def R = s[r][q]Σ{passwd.s[r][p]◁auth(true@Bool).0, quit.R⟨⟩} 
+    in (s[q][p]Σ{login.s[q][r]◁passwd.0, cancel.s[q][r]◁quit.Q⟨⟩} | R⟨⟩) )
+  in (s[p][q]◁{login.s[p][r]Σauth(x@Bool).0, cancel.P⟨⟩} | Q⟨⟩) )
+in P⟨⟩ )

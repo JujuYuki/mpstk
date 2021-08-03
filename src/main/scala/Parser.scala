@@ -163,7 +163,7 @@ class ProcParser extends BaseParser {
   def tpe: Parser[Type] = ground //| mpst
 
   def proc: Parser[Process] = {
-    definition | call | ("(" ~> parallel <~ ")") | branch | select | end | rec | recvar // | res
+    ("(" ~> definition <~ ")") | definition | call | ("(" ~> parallel <~ ")") | branch | select | end | rec | recvar // | res
   }
 
   def end: Parser[Process.End.type] = "0".r ^^ { _ => Process.End }

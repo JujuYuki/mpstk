@@ -30,7 +30,7 @@ s0 [ peripheries=2 ];
 s0 [label="(1,1)"];
 s1 [label="(4,1)"];
 s2 [label="(1,4)"];
-s0->s1[label="o(s(0), r(1), r(0), m(1), p(0))"]; 
+s0->s1[label="o(s(0), r(1), r(0), m(1), p(0))"];
 s0->s2[label="o(s(0), r(0), r(1), m(0), p(0))"];
 }
 ```

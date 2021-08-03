@@ -385,8 +385,8 @@ package object impl {
   // Utility method: merge the given choices, but using the
   // given set of labels, only, and ensuring their compatibility.
   // NOTE: both @t1 and @t2 must contain all @labels
-  private def
-  merge(t1: Choice, t2: Choice,
+  private 
+  def merge(t1: Choice, t2: Choice,
         labels: Set[Label]): Either[String, Choices[PayloadCont]] = for {
     newChoices <- util.eitherList(labels.toList.map { l =>
       val payload1 = t1.choices(l).payload
@@ -444,6 +444,16 @@ package object impl {
     case Process.Definition(_, p1, p2) => roles(p1) ++ roles(p2) //TODO same
   }
 
+  // Check if a type is recursive in a given variable
+  private def recursive(t: Type, v: String): Boolean = t match {
+    case _: NonRecursiveType => false
+    case c: Choice => c.choices.values.exists { pc =>
+      recursive(pc.payload, v) || recursive(pc.cont, v)
+    }
+    case Rec(_, body) => recursive(body, v)
+    case RecVar(s) => (s == v)
+  }
+
   // Extract a process.
   protected[mpstk]
   def extraction(p: Process, r: Role): Either[String, MPST] = p match {
@@ -461,41 +471,20 @@ package object impl {
       case Process.Select(s, from, to, choices) if (from == r) => extraction(p1, r)
       case _ => extraction(p2, r)
     }
-    case Process.Definition(dv, p1, p2) => extraction(p1, r, dv) match {
+    case Process.Definition(dv, p1, p2) => extraction(p1, r) match {
       case Left(s) => extraction(p2, r, dv, Left(s))
       case Right(End) => extraction(p2, r, dv, Right(End))
-      case Right(i) => extraction(p2, r, dv, Right(Rec(RecVar(dv.toString), i)))
-      // TODO handle recursive end in t1 to add recursion head.
+      case Right(i) if recursive(i, dv.toString) => extraction(p2, r, dv, Right(Rec(RecVar(dv.toString), i)))
+      case Right(i) => extraction(p2, r, dv, Right(i))
+      // pass the type of the left side to the right side for replacement purposes.
+      // left-side of definitions are extracted needing only the definitions 
+      // variable's name. Limit: we only keep one in memory for now, so we cannot
+      // handle the case of multi-layered recursion properly. A potential fix is the 
+      // use of a list or a dictionary for passing dv, but it is not very elegant nor
+      // efficient (might be the only way to ensure right-sided multi-layered 
+      // recursions work, however...)
     }
-    // keep dv in memory & check against cv => 
-    //  - in p1 if reach a call for dv, result in recursion variable and return true to rec => p1 is to be extracted with full recursive type;
-    //  - in p2 if reach a call for dv, extract with the extracted type for p1.
-  }
-
-  // extraction for left side of definition
-  private def extraction(p: Process, r: Role, dv: Process.DefName): Either[String, MPST] = p match {
-    case Process.End => Right(End)
-    case Process.Branch(s, to, from, choices) if (to == r) => for {
-      choices2 <- extraction(choices, r, dv)
-    } yield Branch(from, choices2)
-    case Process.Select(s, from, to, choices) if (from == r) => for {
-      choices2 <- extraction(choices, r, dv)
-    } yield Select(to, choices2)
-    case Process.Select(s, from, to, choices) => Right(End) //TODO
-    case Process.Branch(s, to, from, choices) => Right(End) //TODO
-    case Process.Parallel(p1, p2) => p1 match {
-      case Process.Branch(s, to, from, choices) if (to == r) => extraction(p1, r, dv)
-      case Process.Select(s, from, to, choices) if (from == r) => extraction(p1, r, dv)
-      case Process.Call(cv) if (cv == dv) => Right(RecVar(cv.toString))
-      case _ => extraction(p2, r, dv)
-    }
-    case Process.Definition(dvnew, p1, p2) => extraction(p1, r, dvnew) match {
-      case Left(s) => extraction(p2, r, dvnew, Left(s))
-      case Right(End) => extraction(p2, r, dvnew, Right(End))
-      case Right(i) => extraction(p2, r, dvnew, Right(Rec(RecVar(dvnew.toString), i))) // TODO handle more than one recursion level (change dv to a list dv => recvars?)
-      // TODO handle recursive end (same as above)
-    }
-    case Process.Call(cv) if (cv == dv) => Right(RecVar(cv.toString))
+    case Process.Call(cv) => Right(RecVar(cv.toString))
   }
 
   // extraction right side of definition
@@ -517,16 +506,38 @@ package object impl {
         case Right(End) => extraction(p2, r, dv, t)
         case Right(i) => Right(i)
       }
+      case Process.Call(cv) => extraction(p2, r, dv, t) match {
+        case Left(s) => Left(s)
+        case Right(End) => Right(RecVar(cv.toString))
+        case Right(i) => Right(i)
+      }
       case _ => extraction(p2, r, dv, t)
     }
-    case Process.Definition(dvnew, p1, p2) => extraction(p1, r, dvnew) match {
+    case Process.Definition(dvnew, p1, p2) => extraction(p1, r, dv, t) match {
       case Left(s) => extraction(p2, r, dvnew, Left(s))
-      case Right(End) => extraction(p2, r, dvnew, t)
-      case Right(i) => extraction(p2, r, dvnew, Right(Rec(RecVar(dvnew.toString), i)))
-      // TODO handle recursive end (same as above)
+      case Right(End) => extraction(p2, r, dv, t)
+      case Right(i) if recursive(i, dvnew.toString) => extraction(p2, r, dvnew, Right(Rec(RecVar(dvnew.toString), i)))
+      case Right(i) => extraction(p2, r, dvnew, Right(i))
+      // Limits:
+      // - Only works assuming a role is not subject (left) of more than 1 definition.
+      //   A mitigation does not seem useful at the time, as we only expect the 
+      //   results of the tool to be relevant in single-session processes (see the 
+      //   paper for the full definition), which means an endpoint should not be
+      //   subject of more than one process at a time.
+      // - Will not handle properly recursive cases that have a call in the right side
+      //   of a definition inside of the left side of the main definition (priority is 
+      //   given to the inner definition, so it is right side currently).
+      //   Eg: def X = def Y = (...) in Y<>|(...).X<> in (...) will not properly 
+      //       replace the X<> with a recursion, and instead try to replace with
+      //       a type as if def X was already extracted. Will be mitigated later.
+      // - Handling of session-passing (in particular with argunment-enabled 
+      //   definitions) is not enabled at the moment, and it is unclear how I will 
+      //   make it work (several options are possible, but none of those I'm aware of 
+      //   is clean and efficient enough to meet the current code standards)
     }
-    // above TODO: if more than one rec level: many changes needed to handle several types and variables
     case Process.Call(cv) if (cv == dv) => t
+    case Process.Call(cv) => Right(RecVar(cv.toString))
+    // we're right-sided in def: replace with type if known, variable otherwise.
   }
 
   private def extraction(choices: Choices[Process.PayloadCont],
@@ -534,16 +545,6 @@ package object impl {
     lpc2s <- mpstk.util.eitherList(choices.map { lpc =>
       for {
         cont <- extraction(lpc._2.cont, r)
-      } yield (lpc._1, PayloadCont(lpc._2.payload, cont))
-    }.toList)
-  } yield Map(lpc2s:_*)
-
-  // left side definition
-  private def extraction(choices: Choices[Process.PayloadCont],
-                         r: Role, dv: Process.DefName): Either[String, Choices[PayloadCont]] = for {
-    lpc2s <- mpstk.util.eitherList(choices.map { lpc =>
-      for {
-        cont <- extraction(lpc._2.cont, r, dv)
       } yield (lpc._1, PayloadCont(lpc._2.payload, cont))
     }.toList)
   } yield Map(lpc2s:_*)
