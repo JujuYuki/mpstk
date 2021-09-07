@@ -21,6 +21,7 @@ class Verifier(val spec: Spec,
     dir
   }
 
+  // HERE SPEC FILE USED
   private
   lazy val specFile: Path = {
     val path = tempDir.resolve(Paths.get(spec.filename ++ ".mcrl2"))
@@ -48,6 +49,7 @@ class Verifier(val spec: Spec,
     path
   }
   
+  // HERE DOT FILE USED
   private
   lazy val dotFile: Path = {
     val path = tempDir.resolve(Paths.get(spec.filename ++ ".dot"))
@@ -185,6 +187,11 @@ class Verifier(val spec: Spec,
       }
     }
   }
+  // Adapt pbesResult?
+
+  // Find an elegant way to link results (especially false ones) tp the witness for translation.
+  // 1 function is translate
+  // 1 function is call to spec.getMPSTName
 
   // Given the result of an ltsinfo invocation (via util.runCommand),
   // parse the process output and return the number of states

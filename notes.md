@@ -1,22 +1,12 @@
 # Phase 1 extensions
 ## Definition
 
-def X(xi~) = def Y = R(X) in P(Y) in Q
-- Limitation: several-level recursive definitions is (1) hard, (2) mostly intended to break the tool. We only do 1-level recursion.
+- extend definitions to accept arguments (ie. session passing)
+  => difficult (ie. makes the structure of the program more complex, especially for )
 
-def acts as binder double times:
-- once for X w.r.t Q (alpha convert X if already exists in the stack, both in X, P and Q)
-- once for the xi's w.r.t P (alpha convert those only in X(xi~) and in P)
+## Recursion shortcut
 
-Parser: add new storage type Def. Stores a name for the defined item, argument names for this item (can be empty), corresponding process for the item ans finally continuation.
-
-### Process.scala
-case class Definition(defname: DefName, defvars: List[DefVar], defproc: Process, contproc: Process)
-
-### Parser.scala
-definition === "def" ~> (definitionblock) <~ "in" ~> proc
-
-definitionblock === defName ~ ("(" ~> varList <~ ")") ~ ("=" ~> proc)
+- todo sometime (not necessary strictly speaking)
 
 # DOT format memo:
 
@@ -116,7 +106,18 @@ proc E1 = (o(s(0), r(0), r(1), m(0), pEnd) . (i(s(0), r(1), r(0), m(1), pEnd)));
 
 NOTE: order on roles in input and output
 NOTE2: We do not parse transitions t, as they only would be useful for 
-       a fakse result in "never termination" (not reversing that atm because it's lots of work)
+       a false result in "never termination" (not reversing that atm because it's lots of work)
+
+translatedItem = mCRL2_session | mCRL2_role | mCRL2_label
+mCRL2_session: s([int])
+mCRL2_role:    r([int])
+mCRL2_label:   m([int])
+
+item = session | role | label
+all 3 are simple identifiers
+
+search for:
+"% " ~> translatedItem ~ ("=>" ~> item)
 
 ## Parser needs to:
  - translate s(n), r(i), r(j) and m(k) into their respective names 

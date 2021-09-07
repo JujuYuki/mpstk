@@ -138,7 +138,8 @@ object Verifier extends Common {
       // Validate all filename arguments
       cfg.paths.foreach { p =>
         if (!(p.toString.endsWith(FILE_EXT_GLOBAL_TYPE))
-              && !(p.toString.endsWith(FILE_EXT_TYPING_CONTEXT))) {
+              && !(p.toString.endsWith(FILE_EXT_TYPING_CONTEXT))
+              && !(p.toString.endsWith(FILE_EXT_PROCESS))) {
             printError(s"${p}: unsupported file extension")
         }
         checkReadableFile(p)
@@ -272,6 +273,9 @@ object Verifier extends Common {
           mcrl2.Spec(ctx, fname)
         }
       }
+    } else if (fname.endsWith(FILE_EXT_PROCESS)) {
+      //TODO
+      throw new RuntimeException(s"Processes not yet implemented for verifivation (file extension: ${fname})")
     } else {
       throw new RuntimeException(s"BUG: invalid file extension: ${fname}")
     }
@@ -341,6 +345,7 @@ object Verifier extends Common {
          (pres._1, pres._2.toString) })
     }
   }
+  // Adapt verification results?
 
   /** Save test results in a CSV file.
     *

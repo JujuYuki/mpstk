@@ -7,7 +7,7 @@ import scala.util.parsing.combinator._
 import scala.language.postfixOps
 
 import mpstk.{Channel, Label, Role, Session, Type, GroundType}
-import mpstk.{Process, GlobalType, MPST, BasePayloadCont, PayloadCont,
+import mpstk.{DOT, Process, GlobalType, MPST, BasePayloadCont, PayloadCont,
               Branch, Select, Rec, RecVar, End}
 import mpstk.Context
 import mpstk.raw
@@ -470,3 +470,95 @@ object GlobalTypeParser extends GlobalTypeParser {
     parse(Paths.get(filename))
   }
 }
+
+
+protected[parser]
+class DOTParser extends BaseParser {
+  // private val cfg = ParserConfig[Process, Process.PayloadCont](
+  //   (payload: Type, cont: Process) => Process.PayloadCont(payload, cont),
+  //   End,
+  //   Process.End
+  // )
+
+// translatedItem = mCRL2_session | mCRL2_role | mCRL2_label
+// mCRL2_session: s([int])
+// mCRL2_role:    r([int])
+// mCRL2_label:   m([int])
+
+  //def item: Parser[String] = session | role | label
+  def session: Parser[Session] = identifier ^^ { s => Session(s) }
+
+  def value: Parser[String] = identifier ^^ { x => x }
+
+  def state: Parser[DOT.State] = identifier ^^ { x => DOT.State(x) }
+
+  def translatedItem: Parser[String] = mCRL2_session | mCRL2_role | mCRL2_label
+  def mCRL2_session: Parser[String] = "s(" ~> identifier <~ ")" ^^ { x => x }
+  def mCRL2_role: Parser[String] = "r(" ~> identifier <~ ")" ^^ { x => x }
+  def mCRL2_label: Parser[String] = "m(" ~> identifier <~ ")" ^^ { x => x }
+  def mCRL2_payload: Parser[String] = "p(" ~> identifier <~ ")" ^^ { x => x }
+
+  // def translationSession: 
+  // ("% " ~> mCRL2_session) ~ ("=>" ~> session) ^^ {}
+  
+  // def translationRole: 
+  // ("% " ~> mCRL2_role) ~ ("=>" ~> role) ^^ {}
+  
+  // def translationLabel: 
+  // ("% " ~> mCRL2_label) ~ ("=>" ~> label) ^^ {}
+
+  def dot: Parser[DOT] = {
+    branch | select | comm | therest
+  }
+
+  def branch: Parser[DOT.Branch] = {
+    state ~ ("->" ~> state) ~ ("label=\"i(" ~> session) ~ (", " ~> role) ~ (", " ~> role) ~ (", " ~> label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
+      DOT.Branch(rc._1._1._1._1._2, rc._1._1._2, rc._1._1._1._2, rc._1._2, rc._2)
+    }
+  }
+
+  def select: Parser[DOT.Select] = {
+    state ~ ("->" ~> state) ~ ("label=\"o(" ~> session) ~ (", " ~> role) ~ (", " ~> role) ~ (", " ~> label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
+      DOT.Select(rc._1._1._1._1._2, rc._1._1._1._2, rc._1._1._2, rc._1._2, rc._2)
+    }
+  }
+
+  def comm: Parser[DOT.Communication] = {
+    state ~ ("->" ~> state) ~ ("label=\"t(" ~> session) ~ (", " ~> role) ~ (", " ~> role) ~ (", " ~> label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
+      DOT.Communication(rc._1._1._1._1._2, rc._1._1._1._2, rc._1._1._2, rc._1._2, rc._2)
+    }
+  }
+
+  // TODO broaden to catch literally any line
+  def therest: Parser[DOT.TheRest] = {
+    state ^^ { _ => DOT.TheRest("placeholder") }
+  }
+}
+
+/** Parser for global types. */
+// object DOTParser extends ProcParser {
+//   import java.nio.file.{Files, Path, Paths}
+//   import scala.collection.JavaConverters._
+
+//   /** Parse a global type from a string. */
+//   def parse(input: String): ParseResult[DOT] = {
+//     parseAll(comments ~> dot, input)
+//   }
+
+//   /** Parse a global type from a file, given as {@code Path}.
+//     *
+//     * @throws java.io.IOException in case of I/O error
+//     */
+//   def parse(input: Path): ParseResult[DOT] = {
+//     parse(Files.readAllLines(input).asScala.mkString("\n"))
+//   }
+
+//   /** Parse a global type from a file, given as {@code String}.
+//     *
+//     * @throws java.io.IOException in case of I/O error
+//     * @throws java.nio.file.InvalidPathException if {@code filename} is invalid
+//     */
+//   def parseFile(filename: String): ParseResult[DOT] = {
+//     parse(Paths.get(filename))
+//   }
+// }
