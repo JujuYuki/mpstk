@@ -512,19 +512,19 @@ class DOTParser extends BaseParser {
   }
 
   def branch: Parser[DOT.Branch] = {
-    state ~ ("->" ~> state) ~ ("label=\"i(" ~> session) ~ (", " ~> role) ~ (", " ~> role) ~ (", " ~> label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
+    state ~ ("->" ~> state) ~ ("label=\"i(" ~> mCRL2_session) ~ (", " ~> mCRL2_role) ~ (", " ~> mCRL2_role) ~ (", " ~> mCRL2_label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
       DOT.Branch(rc._1._1._1._1._2, rc._1._1._2, rc._1._1._1._2, rc._1._2, rc._2)
     }
   }
 
   def select: Parser[DOT.Select] = {
-    state ~ ("->" ~> state) ~ ("label=\"o(" ~> session) ~ (", " ~> role) ~ (", " ~> role) ~ (", " ~> label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
+    state ~ ("->" ~> state) ~ ("label=\"o(" ~> mCRL2_session) ~ (", " ~> mCRL2_role) ~ (", " ~> mCRL2_role) ~ (", " ~> mCRL2_label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
       DOT.Select(rc._1._1._1._1._2, rc._1._1._1._2, rc._1._1._2, rc._1._2, rc._2)
     }
   }
 
   def comm: Parser[DOT.Communication] = {
-    state ~ ("->" ~> state) ~ ("label=\"t(" ~> session) ~ (", " ~> role) ~ (", " ~> role) ~ (", " ~> label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
+    state ~ ("->" ~> state) ~ ("label=\"t(" ~> mCRL2_session) ~ (", " ~> mCRL2_role) ~ (", " ~> mCRL2_role) ~ (", " ~> mCRL2_label) ~ (", " ~> mCRL2_payload <~ ")\"];") ^^ { rc =>
       DOT.Communication(rc._1._1._1._1._2, rc._1._1._1._2, rc._1._1._2, rc._1._2, rc._2)
     }
   }
@@ -536,7 +536,7 @@ class DOTParser extends BaseParser {
 }
 
 /** Parser for global types. */
-// object DOTParser extends ProcParser {
+// object DOTParser extends DOTParser {
 //   import java.nio.file.{Files, Path, Paths}
 //   import scala.collection.JavaConverters._
 

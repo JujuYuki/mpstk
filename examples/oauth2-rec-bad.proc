@@ -9,5 +9,5 @@
 
 def P = s[p][q]◁{login.s[p][r]Σauth(x@Bool).0, cancel.P⟨⟩} in 
 def Q = s[q][p]Σ{login.s[q][r]◁passwd.0, cancel.s[q][r]◁quit.Q⟨⟩} in 
-def R = s[r][q]Σ{passwd.s[r][p]◁auth(true@Bool).0, quit.R⟨⟩} in 
+def R = s[r][q]Σ{passwd.s[r][p]Σauth(true@Bool).0, quit.R⟨⟩} in 
 ( P⟨⟩ | ( Q⟨⟩ | R⟨⟩ ))

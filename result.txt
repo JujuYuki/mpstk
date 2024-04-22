@@ -1,0 +1,6 @@
+protocol            safe 
+oauth2-rec-bad.ctx  false
+
+witness:
+s[p][r]Σauth(@Bool)
+s[r][p]Σauth(@Bool)

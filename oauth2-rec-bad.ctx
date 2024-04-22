@@ -1,0 +1,3 @@
+s[p]: μ(P)q⊕{login(end).r&{auth(bool).end}, cancel(end).P},
+s[r]: μ(R)q&{passwd(end).p&{auth(bool).end}, quit(end).R},
+s[q]: μ(Q)p&{login(end).r⊕{passwd(end).end}, cancel(end).r⊕{quit(end).Q}}
